@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Valuta-omrekenaar</title>
+<style>
+:root{color-scheme:light dark;--bg:#eef2f1;--card:#fff;--fg:#14201e;--mute:#5d6e6b;--line:#d5dedc;--acc:#0f766e}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1514;--card:#172120;--fg:#e6efed;--mute:#8fa3a0;--line:#27363a;--acc:#5eead4}}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;display:flex;justify-content:center;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{width:100%;max-width:440px}
+h1{font-size:1.25rem;margin:8px 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+.row{display:flex;align-items:center;gap:8px;padding:10px 0}
+.row+.row{border-top:1px solid var(--line)}
+.cur{width:96px;flex:none;min-width:0}
+.cur b{display:block}
+.cur small{display:block;color:var(--mute);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+input{flex:1;min-width:0;font:inherit;font-size:1.2rem;font-variant-numeric:tabular-nums;text-align:right;padding:9px 11px;color:inherit;background:transparent;border:1px solid var(--line);border-radius:8px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.x{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--mute);font-size:1.3rem;cursor:pointer}
+.x:hover{color:var(--fg)}
+.bar{display:flex;gap:8px;margin-top:12px}
+select{flex:1;min-width:0;font:inherit;padding:9px;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px}
+#ref{font:inherit;padding:9px 14px;color:#fff;background:var(--acc);border:0;border-radius:8px;cursor:pointer}
+@media(prefers-color-scheme:dark){#ref{color:#06201c}}
+#info{margin:10px 2px 0;color:var(--mute);font-size:.8rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Valuta-omrekenaar</h1>
+<div class="card" id="rows"></div>
+<div class="bar">
+<select id="add" aria-label="Valuta toevoegen"></select>
+<button id="ref" title="Koersen vernieuwen">Vernieuwen</button>
+</div>
+<p id="info"></p>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const FB={EUR:1,USD:1.16,GBP:0.87,JPY:178,CHF:0.93,CAD:1.62,AUD:1.78,SEK:11,PLN:4.25,TRY:48};
+const DEF=['EUR','USD','GBP','JPY','CHF'];
+const ls=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}};
+const dn=(()=>{try{return new Intl.DisplayNames(['nl'],{type:'currency'})}catch(e){return null}})();
+const nm=c=>{try{return dn?dn.of(c):c}catch(e){return c}};
+const dc={};
+const digits=c=>dc[c]??(dc[c]=(()=>{try{return new Intl.NumberFormat('nl',{style:'currency',currency:c}).resolvedOptions().maximumFractionDigits}catch(e){return 2}})());
+
+const cached=ls('fx');
+let rates=cached&&cached.rates||FB, label=cached?`Koersen van ${cached.date} (opgeslagen)`:'Offline: koersen bij benadering';
+let list=ls('list')||DEF.slice(), src='EUR', amt=100;
+
+// Accepteert 1234,56 / 1234.56 / 1.234,56
+function parse(s){
+  s=s.replace(/[^\d.,]/g,'').replace(/,/g,'.');
+  const i=s.lastIndexOf('.');
+  if(i>=0)s=s.slice(0,i).replace(/\./g,'')+'.'+s.slice(i+1);
+  return s===''||s==='.'?NaN:parseFloat(s);
+}
+function fmt(v,c){
+  if(!isFinite(v))return '';
+  const o={useGrouping:false};
+  if(v&&Math.abs(v)<Math.pow(10,-digits(c)))o.maximumSignificantDigits=3;
+  else o.minimumFractionDigits=o.maximumFractionDigits=digits(c);
+  return v.toLocaleString('nl',o);
+}
+const conv=(a,f,t)=>a/rates[f]*rates[t];
+
+function sync(){
+  list.forEach(c=>{
+    const i=$('#i-'+c);
+    if(c===src&&document.activeElement===i)return;
+    i.value=isNaN(amt)?'':fmt(conv(amt,src,c),c);
+  });
+}
+function opts(){
+  $('#add').innerHTML='<option value="">+ Valuta toevoegen</option>'+
+    Object.keys(rates).filter(c=>!list.includes(c)).sort()
+      .map(c=>`<option value="${c}">${c} – ${nm(c)}</option>`).join('');
+}
+function build(){
+  const box=$('#rows');box.textContent='';
+  list.forEach(c=>{
+    const r=document.createElement('div');r.className='row';
+    r.innerHTML=`<label class="cur" for="i-${c}"><b>${c}</b><small>${nm(c)}</small></label><input id="i-${c}" inputmode="decimal" autocomplete="off"><button class="x" title="Verwijder ${c}" aria-label="Verwijder ${c}">×</button>`;
+    const i=r.querySelector('input');
+    i.oninput=()=>{src=c;amt=parse(i.value);sync()};
+    i.onfocus=()=>i.select();
+    r.querySelector('.x').onclick=()=>{
+      if(list.length<3)return;
+      const keep=list.filter(x=>x!==c);
+      if(src===c){amt=conv(amt,src,keep[0]);src=keep[0]}
+      list=keep;ls('list',list);build();sync();
+    };
+    box.append(r);
+  });
+  box.querySelectorAll('.x').forEach(b=>b.style.visibility=list.length<3?'hidden':'visible');
+  opts();
+}
+function apply(){
+  const n=list.length;
+  list=list.filter(c=>rates[c]);
+  if(list.length<2)list=DEF.slice();
+  if(!list.includes(src))src=list[0];
+  if(list.length!==n||!$('#rows').children.length)build();else opts();
+  $('#info').textContent=label+' · indicatief, geen bankkoersen';
+  sync();
+}
+async function refresh(){
+  $('#info').textContent='Koersen ophalen…';
+  const apis=[
+    ['https://api.frankfurter.dev/v1/latest?base=EUR',j=>({date:j.date,r:Object.assign({EUR:1},j.rates)})],
+    ['https://open.er-api.com/v6/latest/EUR',j=>({date:new Date(j.time_last_update_unix*1000).toISOString().slice(0,10),r:j.rates})]
+  ];
+  for(const [u,f] of apis){
+    try{
+      const res=await fetch(u);if(!res.ok)continue;
+      const {date,r}=f(await res.json());
+      if(!r||!r.USD)continue;
+      rates=r;label=`Koersen van ${date}`;ls('fx',{rates:r,date});
+      return apply();
+    }catch(e){}
+  }
+  label+=' – offline';apply();
+}
+$('#add').onchange=e=>{
+  const c=e.target.value;if(!c)return;
+  list.push(c);ls('list',list);build();sync();
+};
+$('#ref').onclick=refresh;
+apply();refresh();
+</script>
+</body>
+</html>
