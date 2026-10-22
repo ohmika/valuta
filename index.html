@@ -41,7 +41,7 @@ select{flex:1;min-width:0;font:inherit;padding:9px;color:inherit;background:var(
 <script>
 const $=s=>document.querySelector(s);
 const FB={EUR:1,USD:1.16,GBP:0.87,JPY:178,CHF:0.93,CAD:1.62,AUD:1.78,SEK:11,PLN:4.25,TRY:48};
-const DEF=['EUR','USD','GBP','JPY','CHF'];
+const DEF=['EUR','USD','PLN','CZK','CHF'];
 const ls=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}};
 const dn=(()=>{try{return new Intl.DisplayNames(['nl'],{type:'currency'})}catch(e){return null}})();
 const nm=c=>{try{return dn?dn.of(c):c}catch(e){return c}};
